@@ -11,9 +11,34 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
+import os
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load .env from project root if present. Attempt to use python-dotenv, but fall back to
+# a tiny parser so the file is read even if python-dotenv isn't installed yet.
+env_path = BASE_DIR / '.env'
+if env_path.exists():
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(env_path)
+    except Exception:
+        # Fallback: parse simple KEY=VALUE lines
+        try:
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    if '=' in line:
+                        k, v = line.split('=', 1)
+                        v = v.strip().strip("'\"")
+                        os.environ.setdefault(k.strip(), v)
+        except Exception:
+            pass
 
 
 # Quick-start development settings - unsuitable for production
@@ -37,6 +62,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Third party
+    'rest_framework',
+    # Local apps
+    'api',
 ]
 
 MIDDLEWARE = [
@@ -73,10 +102,21 @@ WSGI_APPLICATION = 'myapp.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# Database
+# Require Postgres configuration via environment variables. No sqlite fallback.
+POSTGRES_DB = os.getenv('POSTGRES_DB')
+if not POSTGRES_DB:
+    raise ImproperlyConfigured(
+        "Postgres configuration is required. Please set POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, and POSTGRES_PORT in the environment or in a .env file."
+    )
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': os.getenv('POSTGRES_ENGINE', 'django.db.backends.postgresql'),
+        'NAME': os.getenv('POSTGRES_DB'),
+        'USER': os.getenv('POSTGRES_USER', ''),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD', ''),
+        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+        'PORT': os.getenv('POSTGRES_PORT', '5432'),
     }
 }
 
@@ -121,3 +161,4 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
